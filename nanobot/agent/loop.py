@@ -414,7 +414,7 @@ class AgentLoop:
             self.sessions.invalidate(session.key)
             return OutboundMessage(channel=msg.channel, chat_id=msg.chat_id,
                                   content="New session started.")
-        if cmd == "/help":
+        if cmd in ("/help", "help"):
             help_text = (
                 "🐈 nanobot commands:\n"
                 "/new — Start a new conversation\n"
