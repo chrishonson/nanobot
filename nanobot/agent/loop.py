@@ -427,9 +427,8 @@ class AgentLoop:
                 default_label = parts[1].capitalize() if len(parts) > 1 else parts[0].capitalize()
                 help_text += "\n\nModel routing:"
                 for name in self.agents_config.models:
-                    label = name.capitalize()
-                    help_text += f"\n  @{name} <message>  — Route to {label}"
-                help_text += f"\n  (no prefix)       — Use {default_label} (default)"
+                    help_text += f"\n  @{name} — routes to {name.capitalize()}"
+                help_text += f"\n  (no prefix) — {default_label}"
             return OutboundMessage(channel=msg.channel, chat_id=msg.chat_id,
                                   content=help_text)
 
