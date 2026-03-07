@@ -422,11 +422,14 @@ class AgentLoop:
                 "/help — Show available commands"
             )
             if self.agents_config and self.agents_config.models:
+                default_model = self.agents_config.defaults.model or "default"
+                parts = default_model.rsplit("/", 1)[-1].split("-")
+                default_label = parts[1].capitalize() if len(parts) > 1 else parts[0].capitalize()
                 help_text += "\n\nModel routing:"
-                for name, agent in self.agents_config.models.items():
+                for name in self.agents_config.models:
                     label = name.capitalize()
                     help_text += f"\n  @{name} <message>  — Route to {label}"
-                help_text += "\n  (no prefix)       — Use default model"
+                help_text += f"\n  (no prefix)       — Use {default_label} (default)"
             return OutboundMessage(channel=msg.channel, chat_id=msg.chat_id,
                                   content=help_text)
 

@@ -314,11 +314,14 @@ class TelegramChannel(BaseChannel):
             "/help — Show available commands"
         )
         if self.agents_config and self.agents_config.models:
-            help_text += "\n\nModel routing:"
-            for name, agent in self.agents_config.models.items():
+            default_model = self.agents_config.defaults.model or "default"
+            parts = default_model.rsplit("/", 1)[-1].split("-")
+            default_label = parts[1].capitalize() if len(parts) > 1 else parts[0].capitalize()
+            help_text += "\n\nModel routing (type before your message):"
+            for name in self.agents_config.models:
                 label = name.capitalize()
-                help_text += f"\n  @{name} <message>  — Route to {label}"
-            help_text += "\n  (no prefix)       — Use default model"
+                help_text += f"\n  @\u200B{name} <message>  — Route to {label}"
+            help_text += f"\n  (no prefix)       — Use {default_label} (default)"
         await update.message.reply_text(help_text)
 
     @staticmethod
