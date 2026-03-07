@@ -174,6 +174,8 @@ Add or merge these **two parts** into your config (other options have defaults).
 ```
 Users can then type `@haiku what's the weather?` to route a single message to a cheaper/faster model, or `@opus explain quantum computing` for a more capable one. Messages without a prefix use the default model. Available models appear automatically in `/help`.
 
+> **Note:** Model strings vary by provider (e.g. `anthropic/claude-sonnet-4-6`, `openai/gpt-4o`, `deepseek/deepseek-chat`). Check your provider's docs for the exact model ID — an incorrect string will cause errors.
+
 **3. Chat**
 
 ```bash
