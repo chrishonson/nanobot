@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Any, Awaitable, Callable
 from loguru import logger
 
 from nanobot.agent.context import ContextBuilder
-from nanobot.agent.memory import MemoryConsolidator
+from nanobot.agent.memory import MemoryConsolidator, create_memory_backend
 from nanobot.agent.subagent import SubagentManager
 from nanobot.agent.tools.cron import CronTool
 from nanobot.agent.skills import BUILTIN_SKILLS_DIR
@@ -30,7 +30,7 @@ from nanobot.providers.base import LLMProvider
 from nanobot.session.manager import Session, SessionManager
 
 if TYPE_CHECKING:
-    from nanobot.config.schema import ChannelsConfig, ExecToolConfig, WebSearchConfig
+    from nanobot.config.schema import ChannelsConfig, ExecToolConfig, MemoryConfig, WebSearchConfig
     from nanobot.cron.service import CronService
 
 
@@ -62,6 +62,7 @@ class AgentLoop:
         cron_service: CronService | None = None,
         restrict_to_workspace: bool = False,
         session_manager: SessionManager | None = None,
+        memory_config: MemoryConfig | None = None,
         mcp_servers: dict | None = None,
         channels_config: ChannelsConfig | None = None,
     ):
@@ -80,7 +81,8 @@ class AgentLoop:
         self.cron_service = cron_service
         self.restrict_to_workspace = restrict_to_workspace
 
-        self.context = ContextBuilder(workspace)
+        self.memory_backend = create_memory_backend(workspace, provider, self.model, memory_config)
+        self.context = ContextBuilder(workspace, memory_backend=self.memory_backend)
         self.sessions = session_manager or SessionManager(workspace)
         self.tools = ToolRegistry()
         self.subagents = SubagentManager(
@@ -102,7 +104,7 @@ class AgentLoop:
         self._active_tasks: dict[str, list[asyncio.Task]] = {}  # session_key -> tasks
         self._processing_lock = asyncio.Lock()
         self.memory_consolidator = MemoryConsolidator(
-            workspace=workspace,
+            memory_backend=self.memory_backend,
             provider=provider,
             model=self.model,
             sessions=self.sessions,
@@ -331,12 +333,22 @@ class AgentLoop:
 
     async def close_mcp(self) -> None:
         """Close MCP connections."""
+        await self.memory_backend.close()
         if self._mcp_stack:
             try:
                 await self._mcp_stack.aclose()
             except (RuntimeError, BaseExceptionGroup):
                 pass  # MCP SDK cancel scope cleanup is noisy but harmless
             self._mcp_stack = None
+
+    async def _prepare_history_with_recall(
+        self,
+        history: list[dict[str, Any]],
+        current_message: str,
+    ) -> list[dict[str, Any]]:
+        """Append transient memory recall to history when the backend provides it."""
+        recall = await self.memory_backend.build_recall_message(history, current_message)
+        return history + [recall] if recall else history
 
     def stop(self) -> None:
         """Stop the agent loop."""
@@ -360,13 +372,16 @@ class AgentLoop:
             await self.memory_consolidator.maybe_consolidate_by_tokens(session)
             self._set_tool_context(channel, chat_id, msg.metadata.get("message_id"))
             history = session.get_history(max_messages=0)
+            history_for_prompt = await self._prepare_history_with_recall(history, msg.content)
             messages = self.context.build_messages(
-                history=history,
+                history=history_for_prompt,
                 current_message=msg.content, channel=channel, chat_id=chat_id,
             )
             final_content, _, all_msgs = await self._run_agent_loop(messages)
-            self._save_turn(session, all_msgs, 1 + len(history))
+            skip = 1 + len(history_for_prompt)
+            self._save_turn(session, all_msgs, skip)
             self.sessions.save(session)
+            await self.memory_backend.store_durable_memories(all_msgs[skip:], final_content)
             await self.memory_consolidator.maybe_consolidate_by_tokens(session)
             return OutboundMessage(channel=channel, chat_id=chat_id,
                                   content=final_content or "Background task completed.")
@@ -419,8 +434,9 @@ class AgentLoop:
                 message_tool.start_turn()
 
         history = session.get_history(max_messages=0)
+        history_for_prompt = await self._prepare_history_with_recall(history, msg.content)
         initial_messages = self.context.build_messages(
-            history=history,
+            history=history_for_prompt,
             current_message=msg.content,
             media=msg.media if msg.media else None,
             channel=msg.channel, chat_id=msg.chat_id,
@@ -441,8 +457,10 @@ class AgentLoop:
         if final_content is None:
             final_content = "I've completed processing but have no response to give."
 
-        self._save_turn(session, all_msgs, 1 + len(history))
+        skip = 1 + len(history_for_prompt)
+        self._save_turn(session, all_msgs, skip)
         self.sessions.save(session)
+        await self.memory_backend.store_durable_memories(all_msgs[skip:], final_content)
         await self.memory_consolidator.maybe_consolidate_by_tokens(session)
 
         if (mt := self.tools.get("message")) and isinstance(mt, MessageTool) and mt._sent_in_turn:

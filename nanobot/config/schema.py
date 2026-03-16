@@ -142,6 +142,30 @@ class MCPServerConfig(Base):
     tool_timeout: int = 30  # seconds before a tool call is cancelled
     enabled_tools: list[str] = Field(default_factory=lambda: ["*"])  # Only register these tools; accepts raw MCP names or wrapped mcp_<server>_<tool> names; ["*"] = all tools; [] = no tools
 
+
+class MemoryMCPConfig(Base):
+    """Dedicated MCP configuration for the internal memory backend."""
+
+    type: Literal["stdio", "sse", "streamableHttp"] | None = None
+    command: str = ""
+    args: list[str] = Field(default_factory=list)
+    env: dict[str, str] = Field(default_factory=dict)
+    url: str = ""
+    headers: dict[str, str] = Field(default_factory=dict)
+    tool_timeout: int = 30
+    query_turns: int = 4
+    max_results: int = 5
+    fetch_top_k: int = 2
+    max_durable_writes_per_turn: int = 3
+
+
+class MemoryConfig(Base):
+    """Long-term memory backend configuration."""
+
+    backend: Literal["file", "mcp"] = "file"
+    mcp: MemoryMCPConfig = Field(default_factory=MemoryMCPConfig)
+
+
 class ToolsConfig(Base):
     """Tools configuration."""
 
@@ -156,6 +180,7 @@ class Config(BaseSettings):
 
     agents: AgentsConfig = Field(default_factory=AgentsConfig)
     channels: ChannelsConfig = Field(default_factory=ChannelsConfig)
+    memory: MemoryConfig = Field(default_factory=MemoryConfig)
     providers: ProvidersConfig = Field(default_factory=ProvidersConfig)
     gateway: GatewayConfig = Field(default_factory=GatewayConfig)
     tools: ToolsConfig = Field(default_factory=ToolsConfig)

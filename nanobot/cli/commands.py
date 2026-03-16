@@ -236,7 +236,8 @@ def onboard():
             save_config(config)
             console.print(f"[green]✓[/green] Config refreshed at {config_path} (existing values preserved)")
     else:
-        save_config(Config())
+        config = Config()
+        save_config(config)
         console.print(f"[green]✓[/green] Created config at {config_path}")
 
     console.print("[dim]Config template now uses `maxTokens` + `contextWindowTokens`; `memoryWindow` is no longer a runtime setting.[/dim]")
@@ -250,7 +251,10 @@ def onboard():
         workspace.mkdir(parents=True, exist_ok=True)
         console.print(f"[green]✓[/green] Created workspace at {workspace}")
 
-    sync_workspace_templates(workspace)
+    if config.memory.backend == "mcp":
+        sync_workspace_templates(workspace, include_memory_files=False)
+    else:
+        sync_workspace_templates(workspace)
 
     console.print(f"\n{__logo__} nanobot is ready!")
     console.print("\nNext steps:")
@@ -416,7 +420,10 @@ def gateway(
     port = port if port is not None else config.gateway.port
 
     console.print(f"{__logo__} Starting nanobot gateway on port {port}...")
-    sync_workspace_templates(config.workspace_path)
+    if config.memory.backend == "mcp":
+        sync_workspace_templates(config.workspace_path, include_memory_files=False)
+    else:
+        sync_workspace_templates(config.workspace_path)
     bus = MessageBus()
     provider = _make_provider(config)
     session_manager = SessionManager(config.workspace_path)
@@ -439,6 +446,7 @@ def gateway(
         cron_service=cron,
         restrict_to_workspace=config.tools.restrict_to_workspace,
         session_manager=session_manager,
+        memory_config=config.memory,
         mcp_servers=config.tools.mcp_servers,
         channels_config=config.channels,
     )
@@ -604,7 +612,10 @@ def agent(
 
     config = _load_runtime_config(config, workspace)
     _print_deprecated_memory_window_notice(config)
-    sync_workspace_templates(config.workspace_path)
+    if config.memory.backend == "mcp":
+        sync_workspace_templates(config.workspace_path, include_memory_files=False)
+    else:
+        sync_workspace_templates(config.workspace_path)
 
     bus = MessageBus()
     provider = _make_provider(config)
@@ -630,6 +641,7 @@ def agent(
         exec_config=config.tools.exec,
         cron_service=cron,
         restrict_to_workspace=config.tools.restrict_to_workspace,
+        memory_config=config.memory,
         mcp_servers=config.tools.mcp_servers,
         channels_config=config.channels,
     )

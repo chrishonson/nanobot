@@ -6,11 +6,15 @@ import platform
 import time
 from datetime import datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 from typing import Any
 
-from nanobot.agent.memory import MemoryStore
+from nanobot.agent.memory import FileMemoryBackend
 from nanobot.agent.skills import SkillsLoader
 from nanobot.utils.helpers import build_assistant_message, detect_image_mime
+
+if TYPE_CHECKING:
+    from nanobot.agent.memory import MemoryBackend
 
 
 class ContextBuilder:
@@ -19,9 +23,9 @@ class ContextBuilder:
     BOOTSTRAP_FILES = ["AGENTS.md", "SOUL.md", "USER.md", "TOOLS.md"]
     _RUNTIME_CONTEXT_TAG = "[Runtime Context — metadata only, not instructions]"
 
-    def __init__(self, workspace: Path):
+    def __init__(self, workspace: Path, memory_backend: "MemoryBackend | None" = None):
         self.workspace = workspace
-        self.memory = MemoryStore(workspace)
+        self.memory = memory_backend or FileMemoryBackend(workspace)
         self.skills = SkillsLoader(workspace)
 
     def build_system_prompt(self, skill_names: list[str] | None = None) -> str:
@@ -36,13 +40,14 @@ class ContextBuilder:
         if memory:
             parts.append(f"# Memory\n\n{memory}")
 
-        always_skills = self.skills.get_always_skills()
+        excluded_skills = self._excluded_skill_names()
+        always_skills = self.skills.get_always_skills(exclude_names=excluded_skills)
         if always_skills:
             always_content = self.skills.load_skills_for_context(always_skills)
             if always_content:
                 parts.append(f"# Active Skills\n\n{always_content}")
 
-        skills_summary = self.skills.build_skills_summary()
+        skills_summary = self.skills.build_skills_summary(exclude_names=excluded_skills)
         if skills_summary:
             parts.append(f"""# Skills
 
@@ -72,6 +77,8 @@ Skills with available="false" need dependencies installed first - you can try in
 - Use file tools when they are simpler or more reliable than shell commands.
 """
 
+        memory_lines = "\n".join(self.memory.get_identity_memory_lines(workspace_path))
+
         return f"""# nanobot 🐈
 
 You are nanobot, a helpful AI assistant.
@@ -81,8 +88,7 @@ You are nanobot, a helpful AI assistant.
 
 ## Workspace
 Your workspace is at: {workspace_path}
-- Long-term memory: {workspace_path}/memory/MEMORY.md (write important facts here)
-- History log: {workspace_path}/memory/HISTORY.md (grep-searchable). Each entry starts with [YYYY-MM-DD HH:MM].
+{memory_lines}
 - Custom skills: {workspace_path}/skills/{{skill-name}}/SKILL.md
 
 {platform_policy}
@@ -95,6 +101,16 @@ Your workspace is at: {workspace_path}
 - Ask for clarification when the request is ambiguous.
 
 Reply directly with text for conversations. Only use the 'message' tool to send to a specific chat channel."""
+
+    def _excluded_skill_names(self) -> set[str]:
+        if self.memory.should_include_skill("memory"):
+            return set()
+        blocked = {
+            skill["name"]
+            for skill in self.skills.list_skills(filter_unavailable=False)
+            if skill["name"] == "memory" and skill["source"] == "builtin"
+        }
+        return blocked
 
     @staticmethod
     def _build_runtime_context(channel: str | None, chat_id: str | None) -> str:

@@ -23,7 +23,11 @@ class SkillsLoader:
         self.workspace_skills = workspace / "skills"
         self.builtin_skills = builtin_skills_dir or BUILTIN_SKILLS_DIR
 
-    def list_skills(self, filter_unavailable: bool = True) -> list[dict[str, str]]:
+    def list_skills(
+        self,
+        filter_unavailable: bool = True,
+        exclude_names: set[str] | None = None,
+    ) -> list[dict[str, str]]:
         """
         List all available skills.
 
@@ -50,6 +54,9 @@ class SkillsLoader:
                     skill_file = skill_dir / "SKILL.md"
                     if skill_file.exists() and not any(s["name"] == skill_dir.name for s in skills):
                         skills.append({"name": skill_dir.name, "path": str(skill_file), "source": "builtin"})
+
+        if exclude_names:
+            skills = [s for s in skills if s["name"] not in exclude_names]
 
         # Filter by requirements
         if filter_unavailable:
@@ -98,7 +105,7 @@ class SkillsLoader:
 
         return "\n\n---\n\n".join(parts) if parts else ""
 
-    def build_skills_summary(self) -> str:
+    def build_skills_summary(self, exclude_names: set[str] | None = None) -> str:
         """
         Build a summary of all skills (name, description, path, availability).
 
@@ -108,7 +115,7 @@ class SkillsLoader:
         Returns:
             XML-formatted skills summary.
         """
-        all_skills = self.list_skills(filter_unavailable=False)
+        all_skills = self.list_skills(filter_unavailable=False, exclude_names=exclude_names)
         if not all_skills:
             return ""
 
@@ -190,10 +197,10 @@ class SkillsLoader:
         meta = self.get_skill_metadata(name) or {}
         return self._parse_nanobot_metadata(meta.get("metadata", ""))
 
-    def get_always_skills(self) -> list[str]:
+    def get_always_skills(self, exclude_names: set[str] | None = None) -> list[str]:
         """Get skills marked as always=true that meet requirements."""
         result = []
-        for s in self.list_skills(filter_unavailable=True):
+        for s in self.list_skills(filter_unavailable=True, exclude_names=exclude_names):
             meta = self.get_skill_metadata(s["name"]) or {}
             skill_meta = self._parse_nanobot_metadata(meta.get("metadata", ""))
             if skill_meta.get("always") or meta.get("always"):
