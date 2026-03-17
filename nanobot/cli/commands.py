@@ -453,6 +453,17 @@ def gateway(
     asyncio.run(run())
 
 
+@app.command()
+def dashboard(
+    port: int = typer.Option(18791, "--port", "-p", help="Dashboard port"),
+    host: str = typer.Option("0.0.0.0", "--host", "-h", help="Dashboard host"),
+):
+    """Start the nanobot dashboard."""
+    from nanobot.dashboard.server import start_dashboard
+    console.print(f"{__logo__} Starting nanobot dashboard at [cyan]http://{host}:{port}[/cyan]")
+    start_dashboard(port=port, host=host)
+
+
 
 
 # ============================================================================
