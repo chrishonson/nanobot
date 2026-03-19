@@ -237,6 +237,7 @@ class AgentModel(Base):
     """Named agent with a specific model (used for @prefix routing)."""
 
     model: str = ""
+    provider: str | None = None
     aliases: list[str] = Field(default_factory=list)
 
 
@@ -263,14 +264,14 @@ class AgentsConfig(Base):
         for name, cfg in extra.items():
             self.models[name] = AgentModel(**cfg)
 
-    def resolve_model(self, alias: str) -> str | None:
-        """Return the full model string for *alias*, or ``None``."""
+    def resolve_agent(self, alias: str) -> AgentModel | None:
+        """Return the AgentModel for *alias*, or ``None``."""
         alias = alias.lower()
         if alias in self.models and self.models[alias].model:
-            return self.models[alias].model
+            return self.models[alias]
         for agent in self.models.values():
             if alias in (a.lower() for a in agent.aliases):
-                return agent.model or None
+                return agent if agent.model else None
         return None
 
 

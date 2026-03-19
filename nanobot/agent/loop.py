@@ -179,10 +179,10 @@ class AgentLoop:
             return f'{tc.name}("{val[:40]}…")' if len(val) > 40 else f'{tc.name}("{val}")'
         return ", ".join(_fmt(tc) for tc in tool_calls)
 
-    def _parse_model_prefix(self, content: str) -> tuple[str | None, str]:
+    def _parse_model_prefix(self, content: str):
         """Check *content* for a ``@model`` prefix and resolve it.
 
-        Returns ``(model_override, cleaned_content)``.  When no valid prefix
+        Returns ``(agent_override, cleaned_content)``.  When no valid prefix
         is found the content is returned unchanged with ``None`` as model.
         """
         if not content.startswith("@") or not self.agents_config:
@@ -194,29 +194,35 @@ class AgentLoop:
         remainder = content[first_space + 1:].strip()
         if not remainder:
             return None, content
-        model = self.agents_config.resolve_model(alias)
-        if model:
-            logger.info("@{} prefix → model override: {}", alias, model)
-            return model, remainder
+        agent = self.agents_config.resolve_agent(alias)
+        if agent:
+            logger.info("@{} prefix → agent override: {}", alias, agent.model)
+            return agent, remainder
         return None, content
 
     async def _run_agent_loop(
         self,
         initial_messages: list[dict],
         on_progress: Callable[..., Awaitable[None]] | None = None,
-        model_override: str | None = None,
+        model_override=None,
     ) -> tuple[str | None, list[str], list[dict]]:
         """Run the agent iteration loop. Returns (final_content, tools_used, messages)."""
         messages = initial_messages
         iteration = 0
         final_content = None
         tools_used: list[str] = []
-        model = model_override or self.model
+        model = model_override.model if model_override else self.model
+        
+        provider = self.provider
+        if model_override and model_override.provider:
+            from nanobot.config.loader import load_config
+            from nanobot.providers.factory import create_provider
+            provider = create_provider(load_config(), model, model_override.provider)
 
         while iteration < self.max_iterations:
             iteration += 1
 
-            response = await self.provider.chat(
+            response = await provider.chat(
                 messages=messages,
                 tools=self.tools.get_definitions(),
                 model=model,
