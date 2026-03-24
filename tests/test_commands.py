@@ -201,18 +201,12 @@ def test_onboard_wizard_preserves_explicit_config_in_next_steps(tmp_path, monkey
     assert f"nanobot gateway --config {resolved_config}" in compact_output
 
 
-def test_config_matches_github_copilot_codex_with_hyphen_prefix():
+def test_config_uses_explicit_default_provider_ref():
     config = Config()
-    config.agents.defaults.model = "github-copilot/gpt-5.3-codex"
+    config.agents.defaults.provider = "github_copilot"
+    config.agents.defaults.model = "gpt-5.3-codex"
 
     assert config.get_provider_name() == "github_copilot"
-
-
-def test_config_matches_openai_codex_with_hyphen_prefix():
-    config = Config()
-    config.agents.defaults.model = "openai-codex/gpt-5.1-codex"
-
-    assert config.get_provider_name() == "openai_codex"
 
 
 def test_config_dump_excludes_oauth_provider_blocks():
@@ -224,14 +218,6 @@ def test_config_dump_excludes_oauth_provider_blocks():
     assert "githubCopilot" not in providers
 
 
-def test_config_matches_explicit_ollama_prefix_without_api_key():
-    config = Config()
-    config.agents.defaults.model = "ollama/llama3.2"
-
-    assert config.get_provider_name() == "ollama"
-    assert config.get_api_base() == "http://localhost:11434"
-
-
 def test_config_explicit_ollama_provider_uses_default_localhost_api_base():
     config = Config()
     config.agents.defaults.provider = "ollama"
@@ -241,45 +227,66 @@ def test_config_explicit_ollama_provider_uses_default_localhost_api_base():
     assert config.get_api_base() == "http://localhost:11434"
 
 
-def test_config_auto_detects_ollama_from_local_api_base():
+def test_config_resolves_dynamic_provider_instance_and_default_api_base():
     config = Config.model_validate(
         {
-            "agents": {"defaults": {"provider": "auto", "model": "llama3.2"}},
-            "providers": {"ollama": {"apiBase": "http://localhost:11434"}},
-        }
-    )
-
-    assert config.get_provider_name() == "ollama"
-    assert config.get_api_base() == "http://localhost:11434"
-
-
-def test_config_prefers_ollama_over_vllm_when_both_local_providers_configured():
-    config = Config.model_validate(
-        {
-            "agents": {"defaults": {"provider": "auto", "model": "llama3.2"}},
+            "agents": {"defaults": {"provider": "router-main", "model": "anthropic/claude-3-7-sonnet"}},
             "providers": {
-                "vllm": {"apiBase": "http://localhost:8000"},
-                "ollama": {"apiBase": "http://localhost:11434"},
+                "router-main": {
+                    "type": "openrouter",
+                    "apiKey": "sk-or-test",
+                }
             },
         }
     )
 
-    assert config.get_provider_name() == "ollama"
-    assert config.get_api_base() == "http://localhost:11434"
+    assert config.get_provider_name() == "openrouter"
+    assert config.get_api_base() == "https://openrouter.ai/api/v1"
 
 
-def test_config_falls_back_to_vllm_when_ollama_not_configured():
+def test_config_resolves_dynamic_provider_by_normalized_ref():
     config = Config.model_validate(
         {
-            "agents": {"defaults": {"provider": "auto", "model": "llama3.2"}},
+            "agents": {"defaults": {"provider": "router-main", "model": "anthropic/claude-3-7-sonnet"}},
             "providers": {
-                "vllm": {"apiBase": "http://localhost:8000"},
+                "router-main": {
+                    "type": "openrouter",
+                    "apiKey": "sk-or-test",
+                }
             },
         }
     )
 
-    assert config.get_provider_name() == "vllm"
-    assert config.get_api_base() == "http://localhost:8000"
+    assert config.get_provider_name("router_main") == "openrouter"
+    assert config.get_provider("router_main") is not None
+
+
+def test_validate_runtime_routes_rejects_unknown_provider_ref():
+    config = Config.model_validate(
+        {
+            "agents": {"defaults": {"provider": "does-not-exist", "model": "gpt-4o-mini"}},
+        }
+    )
+
+    with pytest.raises(ValueError, match="agents.defaults.provider 'does-not-exist' is not defined"):
+        config.validate_runtime_routes()
+
+
+def test_validate_runtime_routes_rejects_unknown_dynamic_provider_type():
+    config = Config.model_validate(
+        {
+            "agents": {"defaults": {"provider": "anthropic", "model": "anthropic/claude-opus-4-5"}},
+            "providers": {
+                "router-main": {
+                    "type": "not_a_provider",
+                    "apiKey": "test",
+                }
+            },
+        }
+    )
+
+    with pytest.raises(ValueError, match=r"providers\.router-main\.type 'not_a_provider' is unknown"):
+        config.validate_runtime_routes()
 
 
 def test_find_by_model_prefers_explicit_prefix_over_generic_codex_keyword():

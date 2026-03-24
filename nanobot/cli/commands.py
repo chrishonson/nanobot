@@ -376,70 +376,23 @@ def _onboard_plugins(config_path: Path) -> None:
 
 
 def _make_provider(config: Config):
-    """Create the appropriate LLM provider from config."""
-    from nanobot.providers.azure_openai_provider import AzureOpenAIProvider
-    from nanobot.providers.base import GenerationSettings
-    from nanobot.providers.openai_codex_provider import OpenAICodexProvider
+    """Create the default runtime provider from explicit config routes."""
+    from nanobot.providers.factory import create_provider
 
-    model = config.agents.defaults.model
-    provider_name = config.get_provider_name(model)
-    p = config.get_provider(model)
-
-    # OpenAI Codex (OAuth)
-    if provider_name == "openai_codex" or model.startswith("openai-codex/"):
-        provider = OpenAICodexProvider(default_model=model)
-    # Custom: direct OpenAI-compatible endpoint, bypasses LiteLLM
-    elif provider_name == "custom":
-        from nanobot.providers.custom_provider import CustomProvider
-        provider = CustomProvider(
-            api_key=p.api_key if p else "no-key",
-            api_base=config.get_api_base(model) or "http://localhost:8000/v1",
-            default_model=model,
-            extra_headers=p.extra_headers if p else None,
-        )
-    # Azure OpenAI: direct Azure OpenAI endpoint with deployment name
-    elif provider_name == "azure_openai":
-        if not p or not p.api_key or not p.api_base:
-            console.print("[red]Error: Azure OpenAI requires api_key and api_base.[/red]")
-            console.print("Set them in ~/.nanobot/config.json under providers.azure_openai section")
-            console.print("Use the model field to specify the deployment name.")
-            raise typer.Exit(1)
-        provider = AzureOpenAIProvider(
-            api_key=p.api_key,
-            api_base=p.api_base,
-            default_model=model,
-        )
-    # OpenVINO Model Server: direct OpenAI-compatible endpoint at /v3
-    elif provider_name == "ovms":
-        from nanobot.providers.custom_provider import CustomProvider
-        provider = CustomProvider(
-            api_key=p.api_key if p else "no-key",
-            api_base=config.get_api_base(model) or "http://localhost:8000/v3",
-            default_model=model,
-        )
-    else:
-        from nanobot.providers.litellm_provider import LiteLLMProvider
-        from nanobot.providers.registry import find_by_name
-        spec = find_by_name(provider_name)
-        if not model.startswith("bedrock/") and not (p and p.api_key) and not (spec and (spec.is_oauth or spec.is_local)):
-            console.print("[red]Error: No API key configured.[/red]")
-            console.print("Set one in ~/.nanobot/config.json under providers section")
-            raise typer.Exit(1)
-        provider = LiteLLMProvider(
-            api_key=p.api_key if p else None,
-            api_base=config.get_api_base(model),
-            default_model=model,
-            extra_headers=p.extra_headers if p else None,
-            provider_name=provider_name,
-        )
-
-    defaults = config.agents.defaults
-    provider.generation = GenerationSettings(
-        temperature=defaults.temperature,
-        max_tokens=defaults.max_tokens,
-        reasoning_effort=defaults.reasoning_effort,
+    return create_provider(
+        config,
+        provider_ref=config.agents.defaults.provider,
+        model=config.agents.defaults.model,
     )
-    return provider
+
+
+def _make_provider_pool(config: Config):
+    """Create a reusable provider pool for @agent overrides."""
+    from nanobot.providers.pool import ProviderPool
+
+    return ProviderPool(config)
+
+
 def _load_runtime_config(config: str | None = None, workspace: str | None = None) -> Config:
     """Load config and optionally override the active workspace."""
     from nanobot.config.loader import load_config, set_config_path
@@ -457,6 +410,12 @@ def _load_runtime_config(config: str | None = None, workspace: str | None = None
     _warn_deprecated_config_keys(config_path)
     if workspace:
         loaded.agents.defaults.workspace = workspace
+    try:
+        loaded.validate_runtime_routes()
+    except ValueError as e:
+        console.print("[red]Error: Invalid runtime provider/agent configuration.[/red]")
+        console.print(str(e))
+        raise typer.Exit(1)
     return loaded
 
 
@@ -510,6 +469,7 @@ def gateway(
     console.print(f"{__logo__} Starting nanobot gateway version {__version__} on port {port}...")
     sync_workspace_templates(config.workspace_path)
     bus = MessageBus()
+    provider_pool = _make_provider_pool(config)
     provider = _make_provider(config)
 
     session_manager = SessionManager(config.workspace_path)
@@ -535,6 +495,7 @@ def gateway(
         mcp_servers=config.tools.mcp_servers,
         channels_config=config.channels,
         agents_config=config.agents,
+        provider_pool=provider_pool,
     )
 
     # Set cron callback (needs agent)
@@ -721,6 +682,7 @@ def agent(
     sync_workspace_templates(config.workspace_path)
 
     bus = MessageBus()
+    provider_pool = _make_provider_pool(config)
     provider = _make_provider(config)
 
 
@@ -748,6 +710,7 @@ def agent(
         mcp_servers=config.tools.mcp_servers,
         channels_config=config.channels,
         agents_config=config.agents,
+        provider_pool=provider_pool,
     )
 
     # Shared reference for progress callbacks

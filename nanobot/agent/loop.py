@@ -33,6 +33,7 @@ from nanobot.session.manager import Session, SessionManager
 if TYPE_CHECKING:
     from nanobot.config.schema import AgentsConfig, ChannelsConfig, ExecToolConfig, WebSearchConfig
     from nanobot.cron.service import CronService
+    from nanobot.providers.pool import ProviderPool
 
 
 class AgentLoop:
@@ -66,6 +67,7 @@ class AgentLoop:
         mcp_servers: dict | None = None,
         channels_config: ChannelsConfig | None = None,
         agents_config: AgentsConfig | None = None,
+        provider_pool: ProviderPool | None = None,
     ):
         from nanobot.config.schema import ExecToolConfig, WebSearchConfig
 
@@ -73,6 +75,7 @@ class AgentLoop:
         self.agents_config = agents_config
         self.channels_config = channels_config
         self.provider = provider
+        self.provider_pool = provider_pool
         self.workspace = workspace
         self.model = model or provider.get_default_model()
         self.max_iterations = max_iterations
@@ -243,9 +246,13 @@ class AgentLoop:
         
         provider = self.provider
         if model_override and model_override.provider:
-            from nanobot.config.loader import load_config
-            from nanobot.providers.factory import create_provider
-            provider = create_provider(load_config(), model, model_override.provider)
+            if self.provider_pool:
+                provider = self.provider_pool.get(model_override.provider, model)
+            elif model_override.provider != getattr(getattr(self.agents_config, "defaults", None), "provider", None):
+                logger.warning(
+                    "Provider pool not configured; @agent route '{}' will use the default provider.",
+                    model_override.provider,
+                )
 
         # Wrap on_stream with stateful think-tag filter so downstream
         # consumers (CLI, channels) never see <think> blocks.

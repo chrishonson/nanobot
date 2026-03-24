@@ -1,5 +1,5 @@
 from nanobot.agent.loop import AgentLoop
-from nanobot.config.schema import AgentModel, AgentsConfig
+from nanobot.config.schema import AgentsConfig
 
 
 def _mk_loop(agents_config: AgentsConfig | None = None) -> AgentLoop:
@@ -10,8 +10,16 @@ def _mk_loop(agents_config: AgentsConfig | None = None) -> AgentLoop:
 
 def _agents() -> AgentsConfig:
     return AgentsConfig(
-        haiku={"model": "anthropic/claude-3-5-haiku-20241022", "aliases": ["fast", "cheap"]},
-        opus={"model": "anthropic/claude-opus-4-20250514", "aliases": ["smart", "deep"]},
+        haiku={
+            "provider": "anthropic",
+            "model": "anthropic/claude-3-5-haiku-20241022",
+            "aliases": ["fast", "cheap"],
+        },
+        opus={
+            "provider": "anthropic",
+            "model": "anthropic/claude-opus-4-20250514",
+            "aliases": ["smart", "deep"],
+        },
     )
 
 
