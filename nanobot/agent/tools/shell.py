@@ -6,6 +6,8 @@ import re
 from pathlib import Path
 from typing import Any
 
+from loguru import logger
+
 from nanobot.agent.tools.base import Tool
 
 
@@ -19,6 +21,7 @@ class ExecTool(Tool):
         deny_patterns: list[str] | None = None,
         allow_patterns: list[str] | None = None,
         restrict_to_workspace: bool = False,
+        allowed_dirs: list[str | Path] | None = None,
         path_append: str = "",
     ):
         self.timeout = timeout
@@ -36,6 +39,7 @@ class ExecTool(Tool):
         ]
         self.allow_patterns = allow_patterns or []
         self.restrict_to_workspace = restrict_to_workspace
+        self.allowed_dirs = [Path(p).expanduser().resolve() for p in (allowed_dirs or [])]
         self.path_append = path_append
 
     @property
@@ -110,6 +114,11 @@ class ExecTool(Tool):
                     await asyncio.wait_for(process.wait(), timeout=5.0)
                 except asyncio.TimeoutError:
                     pass
+                finally:
+                    try:
+                        os.waitpid(process.pid, os.WNOHANG)
+                    except (ProcessLookupError, ChildProcessError) as e:
+                        logger.debug("Process already reaped or not found: {}", e)
                 return f"Error: Command timed out after {effective_timeout} seconds"
 
             output_parts = []
@@ -163,6 +172,10 @@ class ExecTool(Tool):
                 return "Error: Command blocked by safety guard (path traversal detected)"
 
             cwd_path = Path(cwd).resolve()
+            allowed_roots = self.allowed_dirs or [cwd_path]
+
+            if not self._is_under_any(cwd_path, allowed_roots):
+                return "Error: Command blocked by safety guard (working dir outside allowed dirs)"
 
             for raw in self._extract_absolute_paths(cmd):
                 try:
@@ -170,10 +183,21 @@ class ExecTool(Tool):
                     p = Path(expanded).expanduser().resolve()
                 except Exception:
                     continue
-                if p.is_absolute() and cwd_path not in p.parents and p != cwd_path:
+                if p.is_absolute() and not self._is_under_any(p, allowed_roots):
                     return "Error: Command blocked by safety guard (path outside working dir)"
 
         return None
+
+    @staticmethod
+    def _is_under_any(path: Path, allowed_roots: list[Path]) -> bool:
+        """Return True when path is equal to or nested under an allowed root."""
+        for root in allowed_roots:
+            try:
+                path.relative_to(root)
+                return True
+            except ValueError:
+                continue
+        return False
 
     @staticmethod
     def _extract_absolute_paths(command: str) -> list[str]:

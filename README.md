@@ -172,7 +172,7 @@ nanobot --version
 
 ```bash
 rm -rf ~/.nanobot/bridge
-nanobot channels login
+nanobot channels login whatsapp
 ```
 
 ## 🚀 Quick Start
@@ -191,9 +191,11 @@ nanobot channels login
 nanobot onboard
 ```
 
+Use `nanobot onboard --wizard` if you want the interactive setup wizard.
+
 **2. Configure** (`~/.nanobot/config.json`)
 
-Add or merge these **two parts** into your config (other options have defaults).
+Configure these **two parts** in your config (other options have defaults).
 
 *Set your API key* (e.g. OpenRouter, recommended for global users):
 ```json
@@ -218,6 +220,48 @@ Add or merge these **two parts** into your config (other options have defaults).
 }
 ```
 
+*Optional — add model routing* to let users switch models per message with `@name`:
+```json
+{
+  "agents": {
+    "defaults": {
+      "model": "anthropic/claude-sonnet-4-6"
+    },
+    "haiku": {
+      "model": "anthropic/claude-haiku-4-5",
+      "aliases": ["fast", "cheap"]
+    },
+    "opus": {
+      "model": "anthropic/claude-opus-4-6",
+      "aliases": ["smart", "deep"]
+    }
+  }
+}
+```
+Users can then type `@haiku what's the weather?` to route a single message to a cheaper/faster model, or `@opus explain quantum computing` for a more capable one. Messages without a prefix use the default model. Available models appear automatically in `/help`.
+
+> **Note:** Model strings vary by provider (e.g. `anthropic/claude-sonnet-4-6`, `openai/gpt-4o`, `deepseek/deepseek-chat`). Check your provider's docs for the exact model ID — an incorrect string will cause errors.
+
+If you want nanobot itself to delegate code work through the built-in `coding_agent` tool, define a named coding route:
+
+```json
+{
+  "agents": {
+    "defaults": {
+      "provider": "ollama",
+      "model": "qwen3.5:32b"
+    },
+    "coder": {
+      "provider": "openai_codex",
+      "model": "openai-codex/gpt-5.1-codex",
+      "aliases": ["codex"]
+    }
+  }
+}
+```
+
+`coding_agent` prefers the `coder` route, then `codex`, then falls back to the default model if neither exists.
+
 **3. Chat**
 
 ```bash
@@ -230,20 +274,20 @@ That's it! You have a working AI assistant in 2 minutes.
 
 Connect nanobot to your favorite chat platform. Want to build your own? See the [Channel Plugin Guide](./docs/CHANNEL_PLUGIN_GUIDE.md).
 
-> Channel plugin support is available in the `main` branch; not yet published to PyPI.
-
 | Channel | What you need |
 |---------|---------------|
 | **Telegram** | Bot token from @BotFather |
 | **Discord** | Bot token + Message Content intent |
-| **WhatsApp** | QR code scan |
+| **WhatsApp** | QR code scan (`nanobot channels login whatsapp`) |
+| **WeChat (Weixin)** | QR code scan (`nanobot channels login weixin`) |
 | **Feishu** | App ID + App Secret |
-| **Mochat** | Claw token (auto-setup available) |
 | **DingTalk** | App Key + App Secret |
 | **Slack** | Bot token + App-Level token |
+| **Matrix** | Homeserver URL + Access token |
 | **Email** | IMAP/SMTP credentials |
 | **QQ** | App ID + App Secret |
 | **Wecom** | Bot ID + Bot Secret |
+| **Mochat** | Claw token (auto-setup available) |
 
 <details>
 <summary><b>Telegram</b> (Recommended)</summary>
@@ -460,7 +504,7 @@ Requires **Node.js ≥18**.
 **1. Link device**
 
 ```bash
-nanobot channels login
+nanobot channels login whatsapp
 # Scan QR with WhatsApp → Settings → Linked Devices
 ```
 
@@ -481,7 +525,7 @@ nanobot channels login
 
 ```bash
 # Terminal 1
-nanobot channels login
+nanobot channels login whatsapp
 
 # Terminal 2
 nanobot gateway
@@ -489,7 +533,7 @@ nanobot gateway
 
 > WhatsApp bridge updates are not applied automatically for existing installations.
 > After upgrading nanobot, rebuild the local bridge with:
-> `rm -rf ~/.nanobot/bridge && nanobot channels login`
+> `rm -rf ~/.nanobot/bridge && nanobot channels login whatsapp`
 
 </details>
 
@@ -718,6 +762,55 @@ nanobot gateway
 </details>
 
 <details>
+<summary><b>WeChat (微信 / Weixin)</b></summary>
+
+Uses **HTTP long-poll** with QR-code login via the ilinkai personal WeChat API. No local WeChat desktop client is required.
+
+**1. Install the optional dependency**
+
+```bash
+pip install nanobot-ai[weixin]
+```
+
+**2. Configure**
+
+```json
+{
+  "channels": {
+    "weixin": {
+      "enabled": true,
+      "allowFrom": ["YOUR_WECHAT_USER_ID"]
+    }
+  }
+}
+```
+
+> - `allowFrom`: Add the sender ID you see in nanobot logs for your WeChat account. Use `["*"]` to allow all users.
+> - `token`: Optional. If omitted, log in interactively and nanobot will save the token for you.
+> - `stateDir`: Optional. Defaults to nanobot's runtime directory for Weixin state.
+> - `pollTimeout`: Optional long-poll timeout in seconds.
+
+**3. Login**
+
+```bash
+nanobot channels login weixin
+```
+
+Use `--force` to re-authenticate and ignore any saved token:
+
+```bash
+nanobot channels login weixin --force
+```
+
+**4. Run**
+
+```bash
+nanobot gateway
+```
+
+</details>
+
+<details>
 <summary><b>Wecom (企业微信)</b></summary>
 
 > Here we use [wecom-aibot-sdk-python](https://github.com/chengyongru/wecom_aibot_sdk) (community Python version of the official [@wecom/aibot-node-sdk](https://www.npmjs.com/package/@wecom/aibot-node-sdk)).
@@ -801,6 +894,8 @@ Config file: `~/.nanobot/config.json`
 | `moonshot` | LLM (Moonshot/Kimi) | [platform.moonshot.cn](https://platform.moonshot.cn) |
 | `zhipu` | LLM (Zhipu GLM) | [open.bigmodel.cn](https://open.bigmodel.cn) |
 | `ollama` | LLM (local, Ollama) | — |
+| `mistral` | LLM | [docs.mistral.ai](https://docs.mistral.ai/) |
+| `ovms` | LLM (local, OpenVINO Model Server) | [docs.openvino.ai](https://docs.openvino.ai/2026/model-server/ovms_docs_llm_quickstart.html) |
 | `vllm` | LLM (local, any OpenAI-compatible server) | — |
 | `openai_codex` | LLM (Codex, OAuth) | `nanobot provider login openai-codex` |
 | `github_copilot` | LLM (GitHub Copilot, OAuth) | `nanobot provider login github-copilot` |
@@ -809,6 +904,7 @@ Config file: `~/.nanobot/config.json`
 <summary><b>OpenAI Codex (OAuth)</b></summary>
 
 Codex uses OAuth instead of API keys. Requires a ChatGPT Plus or Pro account.
+No `providers.openaiCodex` block is needed in `config.json`; `nanobot provider login` stores the OAuth session outside config.
 
 **1. Login:**
 ```bash
@@ -821,6 +917,44 @@ nanobot provider login openai-codex
   "agents": {
     "defaults": {
       "model": "openai-codex/gpt-5.1-codex"
+    }
+  }
+}
+```
+
+**3. Chat:**
+```bash
+nanobot agent -m "Hello!"
+
+# Target a specific workspace/config locally
+nanobot agent -c ~/.nanobot-telegram/config.json -m "Hello!"
+
+# One-off workspace override on top of that config
+nanobot agent -c ~/.nanobot-telegram/config.json -w /tmp/nanobot-telegram-test -m "Hello!"
+```
+
+> Docker users: use `docker run -it` for interactive OAuth login.
+
+</details>
+
+
+<details>
+<summary><b>GitHub Copilot (OAuth)</b></summary>
+
+GitHub Copilot uses OAuth instead of API keys. Requires a [GitHub account with a plan](https://github.com/features/copilot/plans) configured.
+No `providers.githubCopilot` block is needed in `config.json`; `nanobot provider login` stores the OAuth session outside config.
+
+**1. Login:**
+```bash
+nanobot provider login github-copilot
+```
+
+**2. Set model** (merge into `~/.nanobot/config.json`):
+```json
+{
+  "agents": {
+    "defaults": {
+      "model": "github-copilot/gpt-4.1"
     }
   }
 }
@@ -895,6 +1029,81 @@ ollama run llama3.2
 
 > `provider: "auto"` also works when `providers.ollama.apiBase` is configured, but setting `"provider": "ollama"` is the clearest option.
 
+</details>
+
+<details>
+<summary><b>OpenVINO Model Server (local / OpenAI-compatible)</b></summary>
+
+Run LLMs locally on Intel GPUs using [OpenVINO Model Server](https://docs.openvino.ai/2026/model-server/ovms_docs_llm_quickstart.html). OVMS exposes an OpenAI-compatible API at `/v3`.
+
+> Requires Docker and an Intel GPU with driver access (`/dev/dri`).
+
+**1. Pull the model** (example):
+
+```bash
+mkdir -p ov/models && cd ov
+
+docker run -d \
+  --rm \
+  --user $(id -u):$(id -g) \
+  -v $(pwd)/models:/models \
+  openvino/model_server:latest-gpu \
+  --pull \
+  --model_name openai/gpt-oss-20b \
+  --model_repository_path /models \
+  --source_model OpenVINO/gpt-oss-20b-int4-ov \
+  --task text_generation \
+  --tool_parser gptoss \
+  --reasoning_parser gptoss \
+  --enable_prefix_caching true \
+  --target_device GPU
+```
+
+> This downloads the model weights. Wait for the container to finish before proceeding.
+
+**2. Start the server** (example):
+
+```bash
+docker run -d \
+  --rm \
+  --name ovms \
+  --user $(id -u):$(id -g) \
+  -p 8000:8000 \
+  -v $(pwd)/models:/models \
+  --device /dev/dri \
+  --group-add=$(stat -c "%g" /dev/dri/render* | head -n 1) \
+  openvino/model_server:latest-gpu \
+  --rest_port 8000 \
+  --model_name openai/gpt-oss-20b \
+  --model_repository_path /models \
+  --source_model OpenVINO/gpt-oss-20b-int4-ov \
+  --task text_generation \
+  --tool_parser gptoss \
+  --reasoning_parser gptoss \
+  --enable_prefix_caching true \
+  --target_device GPU
+```
+
+**3. Add to config** (partial — merge into `~/.nanobot/config.json`):
+
+```json
+{
+  "providers": {
+    "ovms": {
+      "apiBase": "http://localhost:8000/v3"
+    }
+  },
+  "agents": {
+    "defaults": {
+      "provider": "ovms",
+      "model": "openai/gpt-oss-20b"
+    }
+  }
+}
+```
+
+> OVMS is a local server — no API key required. Supports tool calling (`--tool_parser gptoss`), reasoning (`--reasoning_parser gptoss`), and streaming.
+> See the [official OVMS docs](https://docs.openvino.ai/2026/model-server/ovms_docs_llm_quickstart.html) for more details.
 </details>
 
 <details>
@@ -1161,6 +1370,8 @@ MCP tools are automatically discovered and registered on startup. The LLM can us
 | Option | Default | Description |
 |--------|---------|-------------|
 | `tools.restrictToWorkspace` | `false` | When `true`, restricts **all** agent tools (shell, file read/write/edit, list) to the workspace directory. Prevents path traversal and out-of-scope access. |
+| `tools.allowedPaths` | `[]` | Extra directories that remain accessible when `tools.restrictToWorkspace` is `true`. Use this to grant narrow access to a checked-out repo such as `~/git/nanobot` without opening the whole filesystem. |
+| `tools.exec.enable` | `true` | When `false`, the shell `exec` tool is not registered at all. Use this to completely disable shell command execution. |
 | `tools.exec.pathAppend` | `""` | Extra directories to append to `PATH` when running shell commands (e.g. `/usr/sbin` for `ufw`). |
 | `channels.*.allowFrom` | `[]` (deny all) | Whitelist of user IDs. Empty denies all; use `["*"]` to allow everyone. |
 
@@ -1288,6 +1499,7 @@ nanobot gateway --config ~/.nanobot-telegram/config.json --workspace /tmp/nanobo
 | Command | Description |
 |---------|-------------|
 | `nanobot onboard` | Initialize config & workspace at `~/.nanobot/` |
+| `nanobot onboard --wizard` | Launch the interactive onboarding wizard |
 | `nanobot onboard -c <config> -w <workspace>` | Initialize or refresh a specific instance config and workspace |
 | `nanobot agent -m "..."` | Chat with the agent |
 | `nanobot agent -w <workspace>` | Chat against a specific workspace |
@@ -1298,7 +1510,7 @@ nanobot gateway --config ~/.nanobot-telegram/config.json --workspace /tmp/nanobo
 | `nanobot gateway` | Start the gateway |
 | `nanobot status` | Show status |
 | `nanobot provider login openai-codex` | OAuth login for providers |
-| `nanobot channels login` | Link WhatsApp (scan QR) |
+| `nanobot channels login <channel>` | Authenticate a channel interactively |
 | `nanobot channels status` | Show channel status |
 
 Interactive mode exits: `exit`, `quit`, `/exit`, `/quit`, `:q`, or `Ctrl+D`.

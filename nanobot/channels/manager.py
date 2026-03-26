@@ -34,7 +34,8 @@ class ChannelManager:
         """Initialize channels discovered via pkgutil scan + entry_points plugins."""
         from nanobot.channels.registry import discover_all
 
-        groq_key = self.config.providers.groq.api_key
+        groq_provider = self.config.providers.find_first_by_type("groq")
+        groq_key = groq_provider.config.api_key if groq_provider else ""
 
         for name, cls in discover_all().items():
             section = getattr(self.config.channels, name, None)
@@ -50,6 +51,8 @@ class ChannelManager:
             try:
                 channel = cls(section, self.bus)
                 channel.transcription_api_key = groq_key
+                if name == "telegram":
+                    channel.agents_config = self.config.agents
                 self.channels[name] = channel
                 logger.info("{} channel enabled", cls.display_name)
             except Exception as e:
@@ -130,7 +133,12 @@ class ChannelManager:
                 channel = self.channels.get(msg.channel)
                 if channel:
                     try:
-                        await channel.send(msg)
+                        if msg.metadata.get("_stream_delta") or msg.metadata.get("_stream_end"):
+                            await channel.send_delta(msg.chat_id, msg.content, msg.metadata)
+                        elif msg.metadata.get("_streamed"):
+                            pass
+                        else:
+                            await channel.send(msg)
                     except Exception as e:
                         logger.error("Error sending to {}: {}", msg.channel, e)
                 else:

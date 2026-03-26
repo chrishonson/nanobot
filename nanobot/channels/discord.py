@@ -31,6 +31,7 @@ class DiscordConfig(Base):
     gateway_url: str = "wss://gateway.discord.gg/?v=10&encoding=json"
     intents: int = 37377
     group_policy: Literal["mention", "open"] = "mention"
+    default_agent: str = ""
 
 
 class DiscordChannel(BaseChannel):

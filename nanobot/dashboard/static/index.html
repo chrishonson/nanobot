@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nanobot Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        :root {
+            --bg-deep: #0a0c10;
+            --bg-card: rgba(22, 27, 34, 0.7);
+            --border: rgba(48, 54, 61, 0.8);
+            --accent: #58a6ff;
+            --accent-glow: rgba(88, 166, 255, 0.2);
+            --text-main: #c9d1d9;
+            --text-dim: #8b949e;
+            --terminal-bg: #010409;
+            --success: #3fb950;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: var(--bg-deep);
+            color: var(--text-main);
+            font-family: 'Inter', sans-serif;
+            overflow: hidden;
+            display: flex;
+            height: 100vh;
+        }
+
+        /* Sidebar */
+        aside {
+            width: 240px;
+            background: rgba(1, 4, 9, 0.9);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            padding: 24px;
+            z-index: 10;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-weight: 700;
+            font-size: 1.2rem;
+            color: var(--accent);
+            margin-bottom: 40px;
+        }
+
+        nav ul { list-style: none; }
+        nav li {
+            padding: 12px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            color: var(--text-dim);
+            transition: all 0.2s;
+            margin-bottom: 4px;
+        }
+        nav li:hover { background: rgba(255, 255, 255, 0.05); color: var(--text-main); }
+        nav li.active { background: var(--accent-glow); color: var(--accent); border: 1px solid var(--accent); }
+
+        .sessions-header {
+            margin-top: 32px;
+            margin-bottom: 12px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .session-item {
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            color: var(--text-dim);
+            cursor: pointer;
+            margin-bottom: 4px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .session-item:hover { background: rgba(255,255,255,0.05); color: var(--text-main); }
+
+        /* Main Content */
+        main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        header {
+            height: 70px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 32px;
+            background: rgba(1, 4, 9, 0.5);
+            backdrop-filter: blur(10px);
+            z-index: 10;
+        }
+
+        .status-badge {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.9rem;
+            background: rgba(63, 185, 80, 0.1);
+            color: var(--success);
+            padding: 6px 12px;
+            border-radius: 20px;
+            border: 1px solid rgba(63, 185, 80, 0.3);
+        }
+
+        .content-grid {
+            flex: 1;
+            display: grid;
+            grid-template-columns: 1fr 380px;
+            overflow: hidden;
+        }
+
+        /* Chat Panel */
+        .chat-panel {
+            display: flex;
+            flex-direction: column;
+            border-right: 1px solid var(--border);
+            position: relative;
+            overflow: hidden;
+        }
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 32px;
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+        
+        /* Message Bubbles */
+        .msg { display: flex; flex-direction: column; width: 100%; animation: fadeIn 0.3s ease; }
+        .msg.user .msg-content { 
+            align-self: flex-end; 
+            background: var(--bg-card); 
+            border: 1px solid var(--border); 
+            border-radius: 12px 12px 0 12px; 
+        }
+        .msg.assistant .msg-content { 
+            align-self: flex-start; 
+            background: transparent; 
+            border-left: 2px solid var(--accent); 
+            padding-left: 16px; 
+        }
+        .msg-content { 
+            max-width: 85%; 
+            padding: 12px 16px; 
+            line-height: 1.6; 
+            font-size: 0.95rem; 
+            white-space: pre-wrap; 
+            color: var(--text-main);
+        }
+        .msg.assistant .msg-content { padding: 4px 0 4px 16px; }
+
+        .tool-hint {
+            font-size: 0.8rem;
+            color: var(--text-dim);
+            font-family: 'JetBrains Mono', monospace;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+            align-self: flex-start;
+            background: rgba(255,255,255,0.05);
+            padding: 4px 12px;
+            border-radius: 12px;
+        }
+        .tool-spinner { animation: spin 1s linear infinite; }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* Chat Input */
+        .chat-input-area {
+            padding: 24px 32px;
+            background: rgba(1, 4, 9, 0.8);
+            backdrop-filter: blur(10px);
+            border-top: 1px solid var(--border);
+        }
+        .chat-status-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 12px;
+            padding: 10px 14px;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.03);
+            color: var(--text-dim);
+            font-size: 0.85rem;
+        }
+        .chat-status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: var(--text-dim);
+            flex: 0 0 auto;
+        }
+        .chat-status-row[data-state="working"] .chat-status-dot,
+        .chat-status-row[data-state="tool"] .chat-status-dot,
+        .chat-status-row[data-state="streaming"] .chat-status-dot {
+            animation: pulse 1.2s ease-in-out infinite;
+        }
+        .chat-status-row[data-state="working"] .chat-status-dot,
+        .chat-status-row[data-state="streaming"] .chat-status-dot {
+            background: var(--accent);
+            box-shadow: 0 0 10px var(--accent-glow);
+        }
+        .chat-status-row[data-state="tool"] .chat-status-dot {
+            background: #e3b341;
+            box-shadow: 0 0 10px rgba(227, 179, 65, 0.2);
+        }
+        .chat-status-row[data-state="done"] .chat-status-dot {
+            background: var(--success);
+            box-shadow: 0 0 10px rgba(63, 185, 80, 0.2);
+        }
+        .chat-status-row[data-state="error"] .chat-status-dot {
+            background: #f85149;
+            box-shadow: 0 0 10px rgba(248, 81, 73, 0.2);
+        }
+        .chat-status-row[data-state="done"] {
+            color: var(--text-main);
+        }
+        .chat-status-row[data-state="error"] {
+            color: #f85149;
+        }
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); opacity: 0.85; }
+            50% { transform: scale(1.35); opacity: 1; }
+        }
+        .chat-input-box {
+            display: flex;
+            gap: 12px;
+            background: var(--terminal-bg);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 8px 16px;
+            transition: border-color 0.2s;
+        }
+        .chat-input-box:focus-within { border-color: var(--accent); }
+        .chat-input-box input {
+            flex: 1;
+            background: transparent;
+            border: none;
+            color: var(--text-main);
+            font-size: 0.95rem;
+            outline: none;
+            padding: 8px 0;
+        }
+        .chat-input-box button {
+            background: transparent;
+            border: none;
+            color: var(--accent);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 8px;
+            border-radius: 8px;
+            transition: background 0.2s;
+        }
+        .chat-input-box button:hover { background: var(--accent-glow); }
+
+        /* Right Panel (Activity/Logs) */
+        .activity-panel {
+            display: flex;
+            flex-direction: column;
+            background: var(--terminal-bg);
+            height: 100%;
+        }
+
+        .status-cards {
+            padding: 24px;
+            border-bottom: 1px solid var(--border);
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            background: rgba(1, 4, 9, 0.4);
+        }
+        .stat-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 16px;
+        }
+        .stat-card.full-width { grid-column: 1 / -1; }
+        .stat-card .label { 
+            font-size: 0.75rem; 
+            color: var(--text-dim); 
+            margin-bottom: 8px; 
+            text-transform: uppercase;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .stat-card .value { font-size: 1.1rem; font-weight: 600; color: var(--text-main); }
+        .stat-card .value.accent { color: var(--accent); }
+
+        /* Terminal View */
+        .terminal-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            line-height: 1.5;
+            overflow-y: auto;
+            position: relative;
+        }
+        .terminal-panel::before {
+            content: "LIVE LOGS";
+            position: sticky;
+            top: -20px;
+            background: var(--terminal-bg);
+            color: var(--text-dim);
+            font-weight: bold;
+            display: block;
+            padding: 4px 0;
+            margin-bottom: 12px;
+            z-index: 10;
+        }
+
+        .log-entry { margin-bottom: 2px; }
+        .log-level-INFO { color: var(--success); }
+        .log-level-DEBUG { color: var(--text-dim); }
+        .log-level-WARNING { color: #e3b341; }
+        .log-level-ERROR { color: #f85149; }
+    </style>
+</head>
+<body>
+    <aside>
+        <div class="logo">
+            <i data-lucide="bot"></i>
+            <span>NANOBOT</span>
+        </div>
+        <nav>
+            <ul>
+                <li class="active"><i data-lucide="layout-dashboard"></i> Engine</li>
+                <li><i data-lucide="settings"></i> Settings</li>
+            </ul>
+        </nav>
+
+        <div class="sessions-header">Recent Sessions</div>
+        <div id="sessions-list">
+            <div class="session-item" style="opacity: 0.5;">Loading...</div>
+        </div>
+    </aside>
+
+    <main>
+        <header>
+            <div class="model-info">
+                <span style="color: var(--text-dim); font-size: 0.8rem;">Workspace:</span>
+                <span id="active-workspace" style="font-weight: 600; margin-left: 8px; font-family: 'JetBrains Mono', monospace; font-size: 0.85rem">Loading...</span>
+            </div>
+            <div class="status-badge">
+                <div style="width: 8px; height: 8px; background: var(--success); border-radius: 50%; box-shadow: 0 0 8px var(--success);"></div>
+                Gateway Online
+            </div>
+        </header>
+
+        <div class="content-grid">
+            <!-- Chat Panel -->
+            <section class="chat-panel">
+                <div class="chat-messages" id="chat-messages">
+                    <div style="text-align: center; margin-top: auto; margin-bottom: auto; color: var(--text-dim);">
+                        <i data-lucide="zap" style="width: 32px; height: 32px; color: var(--accent); margin-bottom: 16px;"></i>
+                        <br>
+                        Send a message to interact with the engine.
+                    </div>
+                </div>
+                
+                <div class="chat-input-area">
+                    <div class="chat-status-row" id="chat-status" data-state="idle" aria-live="polite">
+                        <div class="chat-status-dot"></div>
+                        <span id="chat-status-text">Ready for a message.</span>
+                    </div>
+                    <form id="chat-form" onsubmit="handleChatSubmit(event)">
+                        <div class="chat-input-box">
+                            <input type="text" id="chat-input" placeholder="Type a message..." autocomplete="off">
+                            <button type="submit">
+                                <i data-lucide="send"></i>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </section>
+
+            <!-- Activity Panel -->
+            <section class="activity-panel">
+                <div class="status-cards">
+                    <div class="stat-card">
+                        <div class="label"><i data-lucide="cpu" style="width: 14px;"></i> Active Model</div>
+                        <div class="value accent" id="stat-model">...</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="label"><i data-lucide="zap" style="width: 14px;"></i> Avg. Latency</div>
+                        <div class="value" id="stat-latency">...</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="label"><i data-lucide="bar-chart-2" style="width: 14px;"></i> Tokens / Hr</div>
+                        <div class="value" id="stat-tokens">...</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="label"><i data-lucide="link" style="width: 14px;"></i> Channels</div>
+                        <div class="value" id="stat-channels">...</div>
+                    </div>
+                </div>
+
+                <div class="terminal-panel" id="log-container">
+                    <!-- Logs stream here -->
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <script>
+        lucide.createIcons();
+        const chatMessages = document.getElementById('chat-messages');
+        const chatStatus = document.getElementById('chat-status');
+        const chatStatusText = document.getElementById('chat-status-text');
+
+        function setChatStatus(state, text) {
+            chatStatus.dataset.state = state;
+            chatStatusText.textContent = text;
+        }
+
+        function formatStatusTime() {
+            return new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+        }
+
+        // Initial Data Fetch
+        function fetchStatus() {
+            fetch('/api/status')
+                .then(res => res.json())
+                .then(data => {
+                    document.getElementById('active-workspace').innerText = data.workspace;
+                    document.getElementById('stat-model').innerText = data.model.split('/').pop();
+                    
+                    if (data.perf) {
+                        document.getElementById('stat-latency').innerText = (data.perf.avg_latency_ms || 0) + ' ms';
+                        document.getElementById('stat-tokens').innerText = (data.perf.total_tokens || 0).toLocaleString();
+                    }
+                    
+                    document.getElementById('stat-channels').innerText = data.channels && data.channels.length 
+                        ? data.channels.join(', ') 
+                        : 'CLI Only';
+                }).catch(e => console.error(e));
+        }
+
+        function loadSessions() {
+            fetch('/api/sessions')
+                .then(res => res.json())
+                .then(data => {
+                    const list = document.getElementById('sessions-list');
+                    list.innerHTML = '';
+                    const sorted = data.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
+                    
+                    sorted.slice(0, 10).forEach(session => {
+                        const el = document.createElement('div');
+                        el.className = 'session-item';
+                        
+                        let displayKey = session.key;
+                        if(displayKey.startsWith('cli:')) displayKey = displayKey.substring(4);
+                        if(displayKey.startsWith('dashboard:')) displayKey = displayKey.substring(10);
+
+                        el.innerHTML = `
+                            <span><i data-lucide="message-square" style="width:12px; margin-right:6px"></i>${displayKey}</span>
+                            <span style="font-size: 0.7rem;">${new Date(session.updated_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                        `;
+                        list.appendChild(el);
+                    });
+                    lucide.createIcons();
+                });
+        }
+
+        fetchStatus();
+        loadSessions();
+        setInterval(fetchStatus, 5000);
+        setInterval(loadSessions, 10000);
+
+        // Chat Submission via fetch + SSE parsing
+        let isWaiting = false;
+
+        async function handleChatSubmit(e) {
+            e.preventDefault();
+            const input = document.getElementById('chat-input');
+            const text = input.value.trim();
+            if(!text || isWaiting) return;
+
+            input.value = '';
+            isWaiting = true;
+            setChatStatus('working', 'Nanobot is thinking...');
+
+            // Clear empty state prompt if present
+            if(chatMessages.children[0] && chatMessages.children[0].style.textAlign === 'center') {
+                chatMessages.innerHTML = '';
+            }
+
+            // Append User Message
+            const userMsg = document.createElement('div');
+            userMsg.className = 'msg user';
+            userMsg.innerHTML = `<div class="msg-content">${text}</div>`;
+            chatMessages.appendChild(userMsg);
+
+            // Append Assistant Message
+            const asstMsg = document.createElement('div');
+            asstMsg.className = 'msg assistant';
+            const asstContent = document.createElement('div');
+            asstContent.className = 'msg-content';
+            asstMsg.appendChild(asstContent);
+            
+            chatMessages.appendChild(asstMsg);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+
+            try {
+                const response = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: text, session_key: "dashboard:main" })
+                });
+
+                if (!response.ok) {
+                    setChatStatus('error', 'Agent request failed before the response started.');
+                    asstContent.innerText = "Error interacting with agent: " + response.statusText;
+                    return;
+                }
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder("utf-8");
+                let buffer = "";
+
+                let activeHint = null;
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    
+                    buffer += decoder.decode(value, { stream: true });
+                    let lines = buffer.split('\n');
+                    buffer = lines.pop(); // keep trailing partial line
+
+                    for (let line of lines) {
+                        if (line.startsWith('data: ')) {
+                            const dataStr = line.replace('data: ', '').trim();
+                            if (!dataStr) continue;
+                            try {
+                                const payload = JSON.parse(dataStr);
+                                if (payload.type === 'delta') {
+                                    if(activeHint) {
+                                        activeHint.style.opacity = '0.5';
+                                        const i = activeHint.querySelector('i');
+                                        if (i) i.classList.remove('tool-spinner');
+                                        activeHint = null;
+                                    }
+                                    setChatStatus('streaming', 'Nanobot is replying...');
+                                    let cleanHTML = payload.content.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+                                    asstContent.innerHTML += cleanHTML;
+                                } else if (payload.type === 'progress') {
+                                    const statusText = payload.tool_hint
+                                        ? `Nanobot is using tools: ${payload.content}`
+                                        : `Nanobot is thinking: ${payload.content}`;
+                                    setChatStatus(payload.tool_hint ? 'tool' : 'working', statusText);
+                                    const hint = document.createElement('div');
+                                    hint.className = 'tool-hint';
+                                    const spinStr = payload.tool_hint ? 'tool-spinner' : '';
+                                    hint.innerHTML = `<i data-lucide="cog" class="${spinStr}" style="width:14px;height:14px"></i> <span>${payload.content}</span>`;
+                                    asstMsg.insertBefore(hint, asstContent);
+                                    
+                                    try {
+                                        lucide.createIcons({ root: hint });
+                                    } catch(e) {}
+                                    activeHint = hint;
+                                }
+                            } catch (e) {}
+                        }
+                    }
+                    chatMessages.scrollTop = chatMessages.scrollHeight;
+                }
+                setChatStatus('done', `Response complete at ${formatStatusTime()}.`);
+            } catch (err) {
+                setChatStatus('error', 'Connection closed before the response finished.');
+                asstContent.innerText += "\n[Connection closed]";
+            } finally {
+                isWaiting = false;
+                loadSessions();
+            }
+        }
+
+        // Stream Logs
+        const logContainer = document.getElementById('log-container');
+        const eventSource = new EventSource('/api/logs');
+
+        eventSource.onmessage = function(event) {
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            
+            const raw = event.data;
+            let levelClass = '';
+            if (raw.includes('| INFO |')) levelClass = 'log-level-INFO';
+            else if (raw.includes('| DEBUG |')) levelClass = 'log-level-DEBUG';
+            else if (raw.includes('| WARNING |')) levelClass = 'log-level-WARNING';
+            else if (raw.includes('| ERROR |')) levelClass = 'log-level-ERROR';
+            else if (raw.includes('| SUCCESS |')) levelClass = 'log-level-INFO';
+
+            entry.innerHTML = `<span class="${levelClass}">${raw.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</span>`;
+            logContainer.appendChild(entry);
+            
+            // Auto-scroll to bottom if near bottom
+            if (logContainer.scrollTop + logContainer.clientHeight >= logContainer.scrollHeight - 60) {
+                logContainer.scrollTop = logContainer.scrollHeight;
+            }
+
+            if (logContainer.childElementCount > 400) {
+                logContainer.removeChild(logContainer.firstChild);
+            }
+        };
+
+        eventSource.onerror = function() {
+            console.error("Log stream disconnected");
+        };
+    </script>
+</body>
+</html>

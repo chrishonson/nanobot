@@ -10,6 +10,10 @@ Get USER_ID and CHANNEL from the current session (e.g., `8281248569` and `telegr
 
 **Do NOT just write reminders to MEMORY.md** — that won't trigger actual notifications.
 
+## Code Work
+
+When the user asks for real code changes, prefer the built-in `coding_agent` tool for multi-file edits, workspace inspection, and local verification.
+
 ## Heartbeat Tasks
 
 `HEARTBEAT.md` is checked on the configured heartbeat interval. Use file tools to manage periodic tasks:
